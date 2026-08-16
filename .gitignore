@@ -4,9 +4,6 @@
 .env.*.local
 backend/.env
 frontend/.env
-!.env.example
-!backend/.env.example
-!frontend/.env.example
 
 # ==== Dependencies ====
 node_modules/
@@ -26,8 +23,6 @@ yarn-error.log*
 logs/
 
 # ==== Uploaded / generated files ====
-# Sample placeholder plates ARE tracked (needed for the app to work in prod).
-# Only ignore user-uploaded/admin-added plates that shouldn't be in git.
 backend/uploads/*
 !backend/uploads/sample/
 backend/uploads/sample/*
