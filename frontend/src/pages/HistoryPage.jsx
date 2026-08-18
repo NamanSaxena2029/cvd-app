@@ -6,9 +6,10 @@ import Button from '../components/Button';
 import { getHistory, downloadReport } from '../services/resultService';
 
 const STATUS_LABEL = {
-  normal: 'Normal-Range',
+  normal_range: 'Normal-Range',
   borderline: 'Borderline',
-  possible_deficiency: 'Possible CVD',
+  deficient_range: 'Possible CVD',
+  insufficient_data: 'Insufficient Data',
 };
 
 export default function HistoryPage() {
@@ -59,7 +60,7 @@ export default function HistoryPage() {
                 <th className="px-4 py-3">Score</th>
                 <th className="px-4 py-3">Accuracy</th>
                 <th className="px-4 py-3">Screening Result</th>
-                <th className="px-4 py-3">Probable Category</th>
+                <th className="px-4 py-3">Subtype</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
@@ -69,8 +70,8 @@ export default function HistoryPage() {
                   <td className="px-4 py-3">{new Date(r.completedAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">{r.correctCount}/{r.totalQuestions}</td>
                   <td className="px-4 py-3">{Math.round(r.overallAccuracy * 100)}%</td>
-                  <td className="px-4 py-3">{STATUS_LABEL[r.screeningStatus]}</td>
-                  <td className="px-4 py-3">{r.probableCategory ? r.probableCategory.replace('_', '-') : '—'}</td>
+                  <td className="px-4 py-3">{STATUS_LABEL[r.screeningStatus] || r.screeningStatus}</td>
+                  <td className="px-4 py-3">{r.officialScreening?.subtype?.label || '—'}</td>
                   <td className="flex gap-2 px-4 py-3">
                     <Link to={`/result/${r._id}`}>
                       <Button variant="outline" className="!px-2 !py-1">

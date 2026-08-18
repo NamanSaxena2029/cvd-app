@@ -155,6 +155,7 @@ const submitAnswer = asyncHandler(async (req, res) => {
     questionIndex: session.currentQuestionIndex,
     image: currentImage._id,
     givenAnswer,
+    normalVisionResponseSnapshot: currentImage.normalVisionResponse ?? null,
     category: currentImage.category,
     isCorrect,
     isTimeout,

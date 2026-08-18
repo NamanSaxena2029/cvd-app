@@ -8,7 +8,8 @@ const testAnswerSchema = new mongoose.Schema(
     image: { type: mongoose.Schema.Types.ObjectId, ref: 'IshiharaImage', required: true },
 
     givenAnswer: { type: String, default: null }, // null if timeout
-    correctAnswer: { type: String, required: true },
+
+    normalVisionResponseSnapshot: { type: String, default: null },
     category: { type: String, required: true },
 
     isCorrect: { type: Boolean, required: true },

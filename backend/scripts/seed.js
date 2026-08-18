@@ -64,7 +64,8 @@ async function run() {
     console.log(
       `\n${skippedNoImage} of ${inserted} plates have NO image file on disk yet and were seeded ` +
         `as inactive with imageUrl=null. See DATASET_LICENSE.md for how to add licensed images. ` +
-        `The app requires ${'MIN_ACTIVE_IMAGES_REQUIRED'} active plates before a test can start.`
+        `The app requires at least ${require('../config/testConfig').MIN_ACTIVE_IMAGES_REQUIRED} ` +
+        `active plates before a test can start.`
     );
   }
 

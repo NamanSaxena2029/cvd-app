@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, X, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Card } from '../components/Card';
 import Button from '../components/Button';
 import {
@@ -10,7 +10,34 @@ import {
   uploadImageFile,
 } from '../services/adminService';
 
-const EMPTY_FORM = { imageId: '', imageUrl: '', correctAnswer: '', category: 'normal', difficulty: 'medium', active: true };
+const PLATE_TYPES = [
+  'demonstration',
+  'transformation',
+  'vanishing',
+  'hidden_digit',
+  'diagnostic',
+  'classification_tracing',
+];
+
+const EMPTY_FORM = {
+  plateId: '',
+  plateNumber: '',
+  plateType: 'transformation',
+  category: 'red_green',
+  imageUrl: '',
+  imageSource: '',
+  imageSourceUrl: '',
+  imageLicense: '',
+  imageVerified: false,
+  normalVisionResponse: '',
+  redGreenDeficientResponse: '',
+  totalColorBlindResponse: '',
+  protanResponse: '',
+  deutanResponse: '',
+  notes: '',
+  purpose: '',
+  active: false,
+};
 
 export default function AdminImagesPage() {
   const [images, setImages] = useState([]);
@@ -32,7 +59,7 @@ export default function AdminImagesPage() {
       setImages(data.images);
       setCategories(data.availableCategories);
     } catch {
-      setError('Could not load images.');
+      setError('Could not load plates.');
     } finally {
       setLoading(false);
     }
@@ -50,12 +77,23 @@ export default function AdminImagesPage() {
 
   function openEdit(img) {
     setForm({
-      imageId: img.imageId,
-      imageUrl: img.imageUrl,
-      correctAnswer: img.correctAnswer,
-      category: img.category,
-      difficulty: img.difficulty,
-      active: img.active,
+      plateId: img.plateId || '',
+      plateNumber: img.plateNumber ?? '',
+      plateType: img.plateType || 'transformation',
+      category: img.category || 'red_green',
+      imageUrl: img.imageUrl || '',
+      imageSource: img.imageSource || '',
+      imageSourceUrl: img.imageSourceUrl || '',
+      imageLicense: img.imageLicense || '',
+      imageVerified: !!img.imageVerified,
+      normalVisionResponse: img.normalVisionResponse || '',
+      redGreenDeficientResponse: img.redGreenDeficientResponse || '',
+      totalColorBlindResponse: img.totalColorBlindResponse || '',
+      protanResponse: img.protanResponse || '',
+      deutanResponse: img.deutanResponse || '',
+      notes: img.notes || '',
+      purpose: img.purpose || '',
+      active: !!img.active,
     });
     setEditingId(img._id);
     setShowForm(true);
@@ -67,6 +105,8 @@ export default function AdminImagesPage() {
     setUploading(true);
     try {
       const url = await uploadImageFile(file);
+      // A freshly uploaded file is NOT automatically "verified" -- an admin
+      // must separately confirm licensing/provenance before checking that box.
       setForm((f) => ({ ...f, imageUrl: url }));
     } catch (err) {
       setError(err.response?.data?.message || 'Upload failed.');
@@ -79,10 +119,14 @@ export default function AdminImagesPage() {
     e.preventDefault();
     setError('');
     try {
+      const payload = {
+        ...form,
+        plateNumber: form.plateNumber === '' ? undefined : Number(form.plateNumber),
+      };
       if (editingId) {
-        await updateImage(editingId, form);
+        await updateImage(editingId, payload);
       } else {
-        await createImage(form);
+        await createImage(payload);
       }
       setShowForm(false);
       load();
@@ -106,17 +150,26 @@ export default function AdminImagesPage() {
     try {
       await updateImage(img._id, { active: !img.active });
       load();
-    } catch {
-      setError('Could not toggle status.');
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          'Could not toggle status. A plate needs a verified image before it can be activated.'
+      );
     }
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
+    <div className="mx-auto max-w-7xl px-4 py-10">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-slate-800">Ishihara Image Management</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-800">Ishihara Dataset Management</h1>
+          <p className="text-sm text-slate-500">
+            A plate can only be activated once it has a verified, properly licensed image. See
+            DATASET_LICENSE.md.
+          </p>
+        </div>
         <Button onClick={openCreate}>
-          <Plus size={16} /> Add Image
+          <Plus size={16} /> Add Plate
         </Button>
       </div>
 
@@ -127,7 +180,7 @@ export default function AdminImagesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && load()}
-            placeholder="Search by image ID or category..."
+            placeholder="Search by plate ID, category, or source..."
             className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus-ring"
           />
         </div>
@@ -146,26 +199,52 @@ export default function AdminImagesPage() {
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-4 py-3">Preview</th>
-                <th className="px-4 py-3">Image ID</th>
-                <th className="px-4 py-3">Answer</th>
+                <th className="px-4 py-3">Plate #</th>
+                <th className="px-4 py-3">Plate ID</th>
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Difficulty</th>
+                <th className="px-4 py-3">Normal / RG / Protan / Deutan</th>
+                <th className="px-4 py-3">Source</th>
+                <th className="px-4 py-3">Verified</th>
                 <th className="px-4 py-3">Active</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {images.map((img) => (
-                <tr key={img._id} className="border-t border-slate-100">
+                <tr key={img._id} className="border-t border-slate-100 align-top">
                   <td className="px-4 py-2">
-                    <div className="h-10 w-10 overflow-hidden rounded bg-slate-100">
-                      <img src={img.imageUrl} alt={img.imageId} className="h-full w-full object-cover" />
+                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded bg-slate-100 text-[10px] text-slate-400">
+                      {img.imageUrl ? (
+                        <img src={img.imageUrl} alt={img.plateId} className="h-full w-full object-cover" />
+                      ) : (
+                        'no image'
+                      )}
                     </div>
                   </td>
-                  <td className="px-4 py-2">{img.imageId}</td>
-                  <td className="px-4 py-2">{img.correctAnswer}</td>
+                  <td className="px-4 py-2">{img.plateNumber}</td>
+                  <td className="px-4 py-2">{img.plateId}</td>
+                  <td className="px-4 py-2">{img.plateType}</td>
                   <td className="px-4 py-2">{img.category}</td>
-                  <td className="px-4 py-2 capitalize">{img.difficulty}</td>
+                  <td className="px-4 py-2 text-xs text-slate-500">
+                    {[img.normalVisionResponse, img.redGreenDeficientResponse, img.protanResponse, img.deutanResponse]
+                      .map((v) => v ?? '—')
+                      .join(' / ')}
+                  </td>
+                  <td className="px-4 py-2 max-w-[160px] truncate text-xs text-slate-500" title={img.imageSource}>
+                    {img.imageSource || '—'}
+                  </td>
+                  <td className="px-4 py-2">
+                    {img.imageVerified ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700">
+                        <ShieldCheck size={14} /> Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+                        <ShieldAlert size={14} /> Unverified
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2">
                     <button
                       onClick={() => toggleActive(img)}
@@ -188,8 +267,8 @@ export default function AdminImagesPage() {
               ))}
               {images.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                    No images found.
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                    No plates found.
                   </td>
                 </tr>
               )}
@@ -200,11 +279,11 @@ export default function AdminImagesPage() {
 
       {/* Create/Edit Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <Card className="w-full max-w-lg my-8">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-800">
-                {editingId ? 'Edit Image' : 'Add Image'}
+                {editingId ? 'Edit Plate' : 'Add Plate'}
               </h2>
               <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
@@ -219,63 +298,150 @@ export default function AdminImagesPage() {
                   <img src={form.imageUrl} alt="preview" className="mt-2 h-16 w-16 rounded object-cover" />
                 )}
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Plate ID</label>
+                  <input
+                    required
+                    value={form.plateId}
+                    onChange={(e) => setForm({ ...form, plateId: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Plate Number</label>
+                  <input
+                    required
+                    type="number"
+                    value={form.plateNumber}
+                    onChange={(e) => setForm({ ...form, plateNumber: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Plate Type</label>
+                  <select
+                    value={form.plateType}
+                    onChange={(e) => setForm({ ...form, plateType: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  >
+                    {PLATE_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Category</label>
+                  <select
+                    value={form.category}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  >
+                    {(categories.length
+                      ? categories
+                      : [{ key: 'red_green', label: 'Red-Green Deficiency Indicator' }]
+                    ).map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <p className="pt-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                Verified response metadata (leave blank if unknown -- do not guess)
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Normal Vision Response</label>
+                  <input
+                    value={form.normalVisionResponse}
+                    onChange={(e) => setForm({ ...form, normalVisionResponse: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Red-Green Deficient Response</label>
+                  <input
+                    value={form.redGreenDeficientResponse}
+                    onChange={(e) => setForm({ ...form, redGreenDeficientResponse: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Protan Response</label>
+                  <input
+                    value={form.protanResponse}
+                    onChange={(e) => setForm({ ...form, protanResponse: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Deutan Response</label>
+                  <input
+                    value={form.deutanResponse}
+                    onChange={(e) => setForm({ ...form, deutanResponse: e.target.value })}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
+                  />
+                </div>
+              </div>
+
+              <p className="pt-1 text-xs font-medium uppercase tracking-wide text-slate-400">Provenance</p>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Image ID</label>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Source</label>
                 <input
-                  required
-                  value={form.imageId}
-                  onChange={(e) => setForm({ ...form, imageId: e.target.value })}
+                  value={form.imageSource}
+                  onChange={(e) => setForm({ ...form, imageSource: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Correct Answer</label>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Source URL</label>
                 <input
-                  required
-                  value={form.correctAnswer}
-                  onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
+                  value={form.imageSourceUrl}
+                  onChange={(e) => setForm({ ...form, imageSourceUrl: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Category</label>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
+                <label className="mb-1 block text-xs font-medium text-slate-600">License / Permission Notes</label>
+                <textarea
+                  value={form.imageLicense}
+                  onChange={(e) => setForm({ ...form, imageLicense: e.target.value })}
+                  rows={2}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
-                >
-                  {(categories.length ? categories : [{ key: 'normal', label: 'Normal' }]).map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Difficulty</label>
-                <select
-                  value={form.difficulty}
-                  onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus-ring"
-                >
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.imageVerified}
+                  onChange={(e) => setForm({ ...form, imageVerified: e.target.checked })}
+                />
+                Image verified (rights confirmed, image confirmed authentic)
+              </label>
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
                   checked={form.active}
                   onChange={(e) => setForm({ ...form, active: e.target.checked })}
                 />
-                Active (visible in tests)
+                Active (can be shown in live tests -- requires a verified image)
               </label>
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">{editingId ? 'Save Changes' : 'Add Image'}</Button>
+                <Button type="submit">{editingId ? 'Save Changes' : 'Add Plate'}</Button>
               </div>
             </form>
           </Card>
@@ -287,7 +453,7 @@ export default function AdminImagesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="w-full max-w-sm text-center">
             <p className="mb-4 text-slate-700">
-              Delete image <strong>{deleteTarget.imageId}</strong>? This cannot be undone.
+              Delete plate <strong>{deleteTarget.plateId}</strong>? This cannot be undone.
             </p>
             <div className="flex justify-center gap-3">
               <Button variant="secondary" onClick={() => setDeleteTarget(null)}>

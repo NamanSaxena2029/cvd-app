@@ -8,16 +8,18 @@ import Disclaimer from '../components/Disclaimer';
 import { getResult, downloadReport } from '../services/resultService';
 import { useAuth } from '../context/AuthContext';
 
-const STATUS_LABEL = {
-  normal: 'Normal-Range Screening Result',
+const OFFICIAL_STATUS_LABEL = {
+  normal_range: 'Normal-Range Screening Result',
   borderline: 'Borderline Screening Result',
-  possible_deficiency: 'Possible Color Vision Deficiency',
+  deficient_range: 'Pattern Consistent With Possible Colour Vision Deficiency',
+  insufficient_data: 'Not Enough Data For an Official-Rule Result',
 };
 
-const STATUS_COLOR = {
-  normal: 'bg-green-50 text-green-800 border-green-200',
+const OFFICIAL_STATUS_COLOR = {
+  normal_range: 'bg-green-50 text-green-800 border-green-200',
   borderline: 'bg-amber-50 text-amber-800 border-amber-200',
-  possible_deficiency: 'bg-red-50 text-red-800 border-red-200',
+  deficient_range: 'bg-red-50 text-red-800 border-red-200',
+  insufficient_data: 'bg-slate-50 text-slate-700 border-slate-200',
 };
 
 export default function ResultPage() {
@@ -46,9 +48,10 @@ export default function ResultPage() {
     return <div className="mx-auto max-w-md px-4 py-16 text-center text-red-600">{error || 'Result not found.'}</div>;
   }
 
-  const chartData = result.roundStats.map((r) => ({
+  const official = result.officialScreening || {};
+  const chartData = (result.roundStats || []).map((r) => ({
     name: `Round ${r.round}`,
-    accuracy: Math.round(r.accuracy * 100),
+    accuracy: Math.round((r.accuracy || 0) * 100),
   }));
 
   function handleShare() {
@@ -77,10 +80,40 @@ export default function ResultPage() {
         Completed on {new Date(result.completedAt).toLocaleString()}
       </p>
 
-      {/* Overall */}
+      {/* Official Ishihara-rule screening result */}
+      <Card className={`mb-6 border ${OFFICIAL_STATUS_COLOR[official.status] || OFFICIAL_STATUS_COLOR.insufficient_data}`}>
+        <h2 className="mb-1 text-sm font-medium uppercase tracking-wide opacity-70">
+          Preliminary Screening Result (Ishihara Scoring Rule)
+        </h2>
+        <p className="mb-2 text-xl font-semibold">
+          {OFFICIAL_STATUS_LABEL[official.status] || 'Unavailable'}
+        </p>
+        {official.presentedCount != null && official.fullOfficialSetSize != null && (
+          <p className="mb-2 text-sm">
+            {official.normalReadCount} of {official.presentedCount} official screening plates read
+            normally (out of {official.fullOfficialSetSize} in the full set).
+          </p>
+        )}
+        {official.subtype?.label && (
+          <p className="mb-2 text-sm">
+            Subtype: <strong>{official.subtype.label}</strong>
+            {official.subtype.confidence && ` (${official.subtype.confidence} confidence)`}
+          </p>
+        )}
+        {official.subtype && !official.subtype.label && (
+          <p className="mb-2 text-sm italic opacity-80">Subtype could not be reliably estimated.</p>
+        )}
+        {official.note && <p className="text-sm opacity-90">{official.note}</p>}
+      </Card>
+
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+        This Application's Timed-Response Experiment (not the official Ishihara procedure)
+      </p>
+
+      {/* Overall project-level metrics */}
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Overall Score" value={`${result.correctCount}/${result.totalQuestions}`} />
-        <StatCard label="Accuracy" value={`${Math.round(result.overallAccuracy * 100)}%`} />
+        <StatCard label="Accuracy" value={`${Math.round((result.overallAccuracy || 0) * 100)}%`} />
         <StatCard label="Incorrect" value={result.incorrectCount} />
         <StatCard label="Timeouts" value={result.timeoutCount} />
       </div>
@@ -99,19 +132,9 @@ export default function ResultPage() {
         </ResponsiveContainer>
       </Card>
 
-      {/* Screening result */}
-      <Card className={`mb-6 border ${STATUS_COLOR[result.screeningStatus]}`}>
-        <h2 className="mb-1 text-sm font-medium uppercase tracking-wide opacity-70">
-          Preliminary Screening Result
-        </h2>
-        <p className="mb-2 text-xl font-semibold">{STATUS_LABEL[result.screeningStatus]}</p>
-        {result.probableCategory && (
-          <p className="mb-2 text-sm">
-            Probable Category: <strong>{result.probableCategory.replace('_', '-')}</strong>
-            {result.confidence && ` (${result.confidence} confidence)`}
-          </p>
-        )}
-        <p className="text-sm opacity-90">{result.explanation}</p>
+      <Card className="mb-6">
+        <h2 className="mb-2 font-semibold text-slate-800">Summary</h2>
+        <p className="text-sm text-slate-700">{result.explanation}</p>
       </Card>
 
       <div className="mb-6">

@@ -6,8 +6,13 @@ import { StatCard, Card } from '../components/Card';
 import Button from '../components/Button';
 import { getDashboardStats } from '../services/adminService';
 
-const COLORS = ['#22c55e', '#f59e0b', '#ef4444'];
-const STATUS_LABEL = { normal: 'Normal', borderline: 'Borderline', possible_deficiency: 'Possible CVD' };
+const COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#94a3b8'];
+const STATUS_LABEL = {
+  normal_range: 'Normal',
+  borderline: 'Borderline',
+  deficient_range: 'Possible CVD',
+  insufficient_data: 'Insufficient Data',
+};
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
@@ -49,7 +54,7 @@ export default function AdminDashboardPage() {
         <StatCard label="Avg. Accuracy" value={`${Math.round((stats.averageAccuracy || 0) * 100)}%`} />
         <StatCard
           label="Possible CVD Results"
-          value={stats.screeningDistribution.find((d) => d._id === 'possible_deficiency')?.count || 0}
+          value={stats.screeningDistribution.find((d) => d._id === 'deficient_range')?.count || 0}
         />
       </div>
 

@@ -7,7 +7,6 @@ const testSessionSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // null = guest
     guestToken: { type: String, default: null, index: true }, // used to identify guest ownership
 
-    // The 10 plate IDs selected at test start; reused across all 3 rounds.
     imageIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IshiharaImage' }],
 
     currentRound: { type: Number, default: 1 }, // 1..3
