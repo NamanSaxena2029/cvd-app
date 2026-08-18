@@ -1,43 +1,72 @@
-/**
- * Seed script.
- *
- * IMPORTANT: This inserts sample/placeholder Ishihara-style plate metadata
- * ONLY. It does NOT include real, copyrighted Ishihara plate artwork.
- * Replace `imageUrl` values with your own properly licensed plate images
- * placed in backend/uploads/ (or a cloud bucket) before using this app
- * for any real screening purpose.
- */
-
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const mongoose = require('mongoose');
 const IshiharaImage = require('../models/IshiharaImage');
 const User = require('../models/User');
 
-const SAMPLE_PLATES = [
-  { imageId: 'plate_001', imageUrl: '/uploads/sample/plate_001.png', correctAnswer: '12', category: 'normal' },
-  { imageId: 'plate_002', imageUrl: '/uploads/sample/plate_002.png', correctAnswer: '8', category: 'normal' },
-  { imageId: 'plate_003', imageUrl: '/uploads/sample/plate_003.png', correctAnswer: '29', category: 'normal' },
-  { imageId: 'plate_004', imageUrl: '/uploads/sample/plate_004.png', correctAnswer: '5', category: 'normal' },
-  { imageId: 'plate_005', imageUrl: '/uploads/sample/plate_005.png', correctAnswer: '3', category: 'red_green' },
-  { imageId: 'plate_006', imageUrl: '/uploads/sample/plate_006.png', correctAnswer: '15', category: 'red_green' },
-  { imageId: 'plate_007', imageUrl: '/uploads/sample/plate_007.png', correctAnswer: '74', category: 'red_green' },
-  { imageId: 'plate_008', imageUrl: '/uploads/sample/plate_008.png', correctAnswer: '6', category: 'blue_yellow' },
-  { imageId: 'plate_009', imageUrl: '/uploads/sample/plate_009.png', correctAnswer: '45', category: 'blue_yellow' },
-  { imageId: 'plate_010', imageUrl: '/uploads/sample/plate_010.png', correctAnswer: '7', category: 'normal' },
-  { imageId: 'plate_011', imageUrl: '/uploads/sample/plate_011.png', correctAnswer: '16', category: 'red_green' },
-  { imageId: 'plate_012', imageUrl: '/uploads/sample/plate_012.png', correctAnswer: '42', category: 'normal' },
-  { imageId: 'plate_013', imageUrl: '/uploads/sample/plate_013.png', correctAnswer: '96', category: 'total' },
-  { imageId: 'plate_014', imageUrl: '/uploads/sample/plate_014.png', correctAnswer: '2', category: 'blue_yellow' },
-  { imageId: 'plate_015', imageUrl: '/uploads/sample/plate_015.png', correctAnswer: '35', category: 'normal' },
-].map((p) => ({ ...p, difficulty: 'medium', active: true, isSample: true }));
+const MANIFEST_PATH = path.join(__dirname, '..', 'dataset', 'manifest.json');
 
 async function run() {
   await mongoose.connect(process.env.MONGO_URI);
   console.log('Connected. Seeding...');
 
-  await IshiharaImage.deleteMany({ isSample: true });
-  await IshiharaImage.insertMany(SAMPLE_PLATES);
-  console.log(`Inserted ${SAMPLE_PLATES.length} sample plates.`);
+  if (!fs.existsSync(MANIFEST_PATH)) {
+    throw new Error(`Dataset manifest not found at ${MANIFEST_PATH}. Run this from backend/.`);
+  }
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+
+  let inserted = 0;
+  let skippedNoImage = 0;
+
+  for (const p of manifest.plates) {
+    const imageFilePath = path.join(__dirname, '..', 'dataset', p.imageFile);
+    const hasImageOnDisk = fs.existsSync(imageFilePath);
+
+    if (!hasImageOnDisk) skippedNoImage += 1;
+
+    const doc = {
+      plateId: p.plateId,
+      plateNumber: p.plateNumber,
+      plateType: p.plateType,
+      category:
+        p.plateType === 'demonstration'
+          ? 'demonstration'
+          : p.plateType === 'classification_tracing'
+          ? 'classification_tracing'
+          : 'red_green', // transformation/vanishing/hidden_digit/diagnostic all screen red-green
+      normalVisionResponse: p.normalVisionResponse ?? null,
+      redGreenDeficientResponse: p.redGreenDeficientResponse ?? null,
+      totalColorBlindResponse: p.totalColorBlindResponse ?? null,
+      protanResponse: p.protanResponse ?? null,
+      deutanResponse: p.deutanResponse ?? null,
+      notes: p.notes ?? null,
+      // dataset/ishihara/plate-XX/image.png is served at /dataset-images/plate-XX/image.png
+      imageUrl: hasImageOnDisk ? p.imageUrl || `/dataset-images/${p.plateId}/image.png` : null,
+      imageSource: p.imageSource ?? null,
+      imageSourceUrl: p.imageSourceUrl ?? null,
+      imageLicense: p.imageLicense ?? null,
+      imageVerified: !!p.imageVerified,
+      // never force-activate on seed, even if metadata says active=true --
+      // an admin must consciously activate a plate after checking it.
+      active: false,
+    };
+
+    await IshiharaImage.findOneAndUpdate({ plateId: p.plateId }, doc, {
+      upsert: true,
+      setDefaultsOnInsert: true,
+    });
+    inserted += 1;
+  }
+
+  console.log(`Upserted metadata for ${inserted} plates.`);
+  if (skippedNoImage > 0) {
+    console.log(
+      `\n${skippedNoImage} of ${inserted} plates have NO image file on disk yet and were seeded ` +
+        `as inactive with imageUrl=null. See DATASET_LICENSE.md for how to add licensed images. ` +
+        `The app requires ${'MIN_ACTIVE_IMAGES_REQUIRED'} active plates before a test can start.`
+    );
+  }
 
   const adminEmail = 'admin@cvd-app.local';
   const existingAdmin = await User.findOne({ email: adminEmail });
@@ -60,6 +89,6 @@ async function run() {
 }
 
 run().catch((err) => {
-  console.error('Seed failed:', err);
+  console.error('Seed failed:', err.message);
   process.exit(1);
 });

@@ -27,8 +27,10 @@ app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 
-// Static serving of uploaded Ishihara plates (dev storage)
+// Static serving of uploaded Ishihara plates (dev storage) and, once added,
+// the licensed dataset images -- see DATASET_LICENSE.md.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/dataset-images', express.static(path.join(__dirname, 'dataset', 'ishihara')));
 
 app.use('/api', apiLimiter);
 

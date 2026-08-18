@@ -2,9 +2,38 @@ const TestSession = require('../models/TestSession');
 const TestAnswer = require('../models/TestAnswer');
 const TestResult = require('../models/TestResult');
 const asyncHandler = require('../utils/asyncHandler');
-const { analyzeScreening } = require('../services/screeningService');
+const { scoreSession } = require('../services/ishiharaScoringService');
 const { isSessionOwnedBy } = require('../services/testSessionService');
 const { generateReportPdf } = require('../services/pdfReportService');
+
+function buildExplanation(officialScreening) {
+  const { status, presentedCount, fullOfficialSetSize, normalReadCount, subtype, note } = officialScreening;
+
+  if (status === 'insufficient_data') {
+    return `Not enough of the official numeral screening plates were presented to produce a ` +
+      `screening result. ${note}`;
+  }
+
+  const base = `${normalReadCount} of ${presentedCount} numeral screening plates were read as a ` +
+    `person with normal colour vision would read them. ${note}`;
+
+  if (status === 'normal_range') {
+    return `Preliminary screening indicates a normal-range result. ${base} No pattern consistent ` +
+      `with colour vision deficiency was detected in this session. This is not a medical diagnosis.`;
+  }
+  if (status === 'borderline') {
+    return `Preliminary screening result is borderline. ${base} This does not confirm a colour ` +
+      `vision deficiency, but Ishihara's own manual notes this range is inconclusive and ` +
+      `recommends further professional testing (e.g. an anomaloscope).`;
+  }
+  // deficient_range
+  const subtypeText = subtype?.label
+    ? ` The pattern of responses on the diagnostic plates is most consistent with a "${subtype.label}".`
+    : '';
+  return `Preliminary screening indicates a pattern consistent with possible red-green colour ` +
+    `vision deficiency. ${base}${subtypeText} Professional testing is recommended for ` +
+    `confirmation. This is not a medical diagnosis.`;
+}
 
 // POST /api/test/:sessionId/complete
 const completeTest = asyncHandler(async (req, res) => {
@@ -25,18 +54,40 @@ const completeTest = asyncHandler(async (req, res) => {
     return res.status(409).json({ message: 'Test is not yet complete.' });
   }
 
-  const answers = await TestAnswer.find({ session: session._id }).lean();
+  const answers = await TestAnswer.find({ session: session._id })
+    .populate('image') // the IshiharaImage/plate this answer was for
+    .lean();
   if (answers.length === 0) {
     return res.status(409).json({ message: 'No answers recorded for this session.' });
   }
 
-  const analysis = analyzeScreening(answers);
+  const scoringInput = answers.map((a) => ({
+    round: a.round,
+    givenAnswer: a.givenAnswer,
+    isSkipped: a.isSkipped,
+    isTimeout: a.isTimeout,
+    isCorrect: a.isCorrect,
+    plate: a.image, // populated IshiharaImage doc
+  }));
+
+  const { officialScreening, projectExperiment, disclaimer } = scoreSession(scoringInput);
+
+  const explanation = buildExplanation(officialScreening);
 
   const result = await TestResult.create({
     session: session._id,
     user: session.user || null,
     guestToken: session.guestToken || null,
-    ...analysis,
+    totalQuestions: projectExperiment.totalQuestions,
+    correctCount: projectExperiment.correctCount,
+    incorrectCount: projectExperiment.incorrectCount,
+    timeoutCount: projectExperiment.timeoutCount,
+    overallAccuracy: projectExperiment.overallAccuracy,
+    roundStats: projectExperiment.roundStats,
+    officialScreening,
+    screeningStatus: officialScreening.status,
+    explanation,
+    disclaimer,
   });
 
   res.status(201).json({ result });
@@ -95,7 +146,7 @@ const getSharedResult = asyncHandler(async (req, res) => {
       timeoutCount: result.timeoutCount,
       totalQuestions: result.totalQuestions,
       screeningStatus: result.screeningStatus,
-      probableCategory: result.probableCategory,
+      officialScreening: result.officialScreening,
       explanation: result.explanation,
       disclaimer: result.disclaimer,
       roundStats: result.roundStats,

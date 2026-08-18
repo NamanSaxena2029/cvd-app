@@ -4,31 +4,40 @@ const TestSession = require('../models/TestSession');
 const TestAnswer = require('../models/TestAnswer');
 const asyncHandler = require('../utils/asyncHandler');
 const config = require('../config/testConfig');
+const { readNormally } = require('../services/ishiharaScoringService');
 const {
   TestError,
   pickPlatesForSession,
   isSessionOwnedBy,
 } = require('../services/testSessionService');
 
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 function publicImage(image) {
   return {
     id: image._id,
     imageUrl: image.imageUrl,
-    // correctAnswer & category are never sent to the client during the test
+    // plate answers/type are never sent to the client during the test
   };
+}
+
+// Session.imageIds holds up to TOTAL_QUESTIONS (30) plates in presentation
+// order for the WHOLE session. currentRound/currentQuestionIndex are kept
+// for round-based UI/timer purposes, but the plate array is addressed by a
+// single flattened index.
+function globalIndex(round, questionIndex) {
+  return (round - 1) * config.QUESTIONS_PER_ROUND + questionIndex;
+}
+
+async function loadOrderedImages(session) {
+  const images = await IshiharaImage.find({ _id: { $in: session.imageIds } });
+  const imageMap = new Map(images.map((i) => [String(i._id), i]));
+  return session.imageIds.map((id) => imageMap.get(String(id)));
 }
 
 // POST /api/test/start
 const startTest = asyncHandler(async (req, res) => {
+  // Up to TOTAL_QUESTIONS distinct plates for the whole session (all 3
+  // rounds) -- see testSessionService.pickPlatesForSession for why this
+  // replaced the old "same 10 plates, 3 times" behaviour.
   const images = await pickPlatesForSession();
   const imageIds = images.map((i) => i._id);
 
@@ -44,7 +53,7 @@ const startTest = asyncHandler(async (req, res) => {
     currentQuestionServedAt: new Date(),
   });
 
-  const firstImage = images[0];
+  const firstImage = images[globalIndex(1, 0)];
 
   res.status(201).json({
     sessionId: session.sessionId,
@@ -71,11 +80,8 @@ const getSession = asyncHandler(async (req, res) => {
     return res.json({ sessionId: session.sessionId, status: session.status });
   }
 
-  const images = await IshiharaImage.find({ _id: { $in: session.imageIds } });
-  const imageMap = new Map(images.map((i) => [String(i._id), i]));
-  const orderedImages = session.imageIds.map((id) => imageMap.get(String(id)));
-
-  const currentImage = orderedImages[session.currentQuestionIndex];
+  const orderedImages = await loadOrderedImages(session);
+  const currentImage = orderedImages[globalIndex(session.currentRound, session.currentQuestionIndex)];
 
   // refresh the timer anchor on resume so a refresh doesn't grant free time,
   // but doesn't unfairly penalize either -> we simply restart this question's timer
@@ -109,10 +115,8 @@ const submitAnswer = asyncHandler(async (req, res) => {
 
   const { answer, isSkip } = req.body;
 
-  const images = await IshiharaImage.find({ _id: { $in: session.imageIds } });
-  const imageMap = new Map(images.map((i) => [String(i._id), i]));
-  const orderedImages = session.imageIds.map((id) => imageMap.get(String(id)));
-  const currentImage = orderedImages[session.currentQuestionIndex];
+  const orderedImages = await loadOrderedImages(session);
+  const currentImage = orderedImages[globalIndex(session.currentRound, session.currentQuestionIndex)];
 
   const allowedTimeSeconds = config.TIME_PER_QUESTION[session.currentRound - 1];
   const servedAt = session.currentQuestionServedAt || session.startTime;
@@ -124,18 +128,26 @@ const submitAnswer = asyncHandler(async (req, res) => {
   const isTimeout = elapsedMs > allowedTimeSeconds * 1000 + GRACE_MS;
 
   let givenAnswer = null;
-  let isCorrect = false;
   let isSkipped = false;
 
   if (isTimeout) {
-    isCorrect = false;
+    // no answer recorded
   } else if (isSkip) {
     isSkipped = true;
-    isCorrect = false;
   } else {
     givenAnswer = typeof answer === 'string' ? answer.trim() : String(answer ?? '').trim();
-    isCorrect = givenAnswer.toLowerCase() === String(currentImage.correctAnswer).trim().toLowerCase();
+    if (givenAnswer === '') givenAnswer = null;
   }
+
+  // "isCorrect" here means: matches how a person with NORMAL colour vision
+  // would read this plate (per its verified metadata) -- this is this
+  // application's own project-level accuracy metric. The clinically
+  // meaningful, plate-count-based screening result is computed separately
+  // in ishiharaScoringService when the test completes.
+  const isCorrect =
+    !isTimeout &&
+    !isSkipped &&
+    readNormally({ givenAnswer, isSkipped }, currentImage);
 
   await TestAnswer.create({
     session: session._id,
@@ -143,7 +155,6 @@ const submitAnswer = asyncHandler(async (req, res) => {
     questionIndex: session.currentQuestionIndex,
     image: currentImage._id,
     givenAnswer,
-    correctAnswer: currentImage.correctAnswer,
     category: currentImage.category,
     isCorrect,
     isTimeout,
@@ -182,7 +193,7 @@ const submitAnswer = asyncHandler(async (req, res) => {
   session.currentQuestionServedAt = new Date();
   await session.save();
 
-  const nextImage = orderedImages[nextIndex];
+  const nextImage = orderedImages[globalIndex(nextRound, nextIndex)];
 
   res.json({
     isCorrect,

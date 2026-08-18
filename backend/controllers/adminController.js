@@ -54,38 +54,66 @@ const getDashboard = asyncHandler(async (req, res) => {
 
 // GET /api/admin/images
 const listImages = asyncHandler(async (req, res) => {
-  const { search, category, active } = req.query;
+  const { search, category, plateType, active } = req.query;
   const query = {};
   if (search) {
     query.$or = [
-      { imageId: { $regex: search, $options: 'i' } },
+      { plateId: { $regex: search, $options: 'i' } },
       { category: { $regex: search, $options: 'i' } },
+      { imageSource: { $regex: search, $options: 'i' } },
     ];
   }
   if (category) query.category = category;
+  if (plateType) query.plateType = plateType;
   if (active === 'true') query.active = true;
   if (active === 'false') query.active = false;
 
-  const images = await IshiharaImage.find(query).sort({ createdAt: -1 });
-  res.json({ images, availableCategories: config.CATEGORIES });
+  const images = await IshiharaImage.find(query).sort({ plateNumber: 1 });
+  res.json({ images, availableCategories: config.CATEGORIES, availablePlateTypes: config.PLATE_TYPES });
 });
 
 // POST /api/admin/images
+// Note: metadata (plateNumber, plateType, expected responses) is normally
+// seeded from backend/dataset/manifest.json (see DATASET_LICENSE.md). This
+// endpoint exists mainly to let an admin attach/replace an image + its
+// provenance on an existing plate record, or add a genuinely new plate.
 const createImage = asyncHandler(async (req, res) => {
-  const { imageId, imageUrl, correctAnswer, category, difficulty, active } = req.body;
+  const {
+    plateId, plateNumber, plateType, category,
+    imageUrl, imageSource, imageSourceUrl, imageLicense, imageVerified,
+    normalVisionResponse, redGreenDeficientResponse, totalColorBlindResponse,
+    protanResponse, deutanResponse, notes, purpose, active,
+  } = req.body;
 
-  if (!isNonEmptyString(imageId, 100) || !isNonEmptyString(imageUrl, 500) ||
-      !isNonEmptyString(correctAnswer, 50) || !isNonEmptyString(category, 50)) {
-    return res.status(400).json({ message: 'imageId, imageUrl, correctAnswer, and category are required.' });
+  if (!isNonEmptyString(plateId, 100) || !plateNumber || !isNonEmptyString(plateType, 50) ||
+      !isNonEmptyString(category, 50)) {
+    return res.status(400).json({ message: 'plateId, plateNumber, plateType, and category are required.' });
+  }
+  if (active && (!imageUrl || !imageVerified)) {
+    return res.status(400).json({
+      message: 'A plate cannot be created as active without both imageUrl and imageVerified=true. ' +
+        'See DATASET_LICENSE.md.',
+    });
   }
 
   const image = await IshiharaImage.create({
-    imageId: imageId.trim(),
-    imageUrl: imageUrl.trim(),
-    correctAnswer: correctAnswer.trim(),
+    plateId: plateId.trim(),
+    plateNumber,
+    plateType,
     category: category.trim(),
-    difficulty: difficulty || 'medium',
-    active: active !== undefined ? !!active : true,
+    imageUrl: imageUrl?.trim() || null,
+    imageSource: imageSource?.trim() || null,
+    imageSourceUrl: imageSourceUrl?.trim() || null,
+    imageLicense: imageLicense?.trim() || null,
+    imageVerified: !!imageVerified,
+    normalVisionResponse: normalVisionResponse ?? null,
+    redGreenDeficientResponse: redGreenDeficientResponse ?? null,
+    totalColorBlindResponse: totalColorBlindResponse ?? null,
+    protanResponse: protanResponse ?? null,
+    deutanResponse: deutanResponse ?? null,
+    notes: notes ?? null,
+    purpose: purpose ?? null,
+    active: !!active,
   });
 
   res.status(201).json({ image });
@@ -93,17 +121,33 @@ const createImage = asyncHandler(async (req, res) => {
 
 // PUT /api/admin/images/:id
 const updateImage = asyncHandler(async (req, res) => {
-  const { imageId, imageUrl, correctAnswer, category, difficulty, active } = req.body;
+  const {
+    plateId, plateNumber, plateType, category,
+    imageUrl, imageSource, imageSourceUrl, imageLicense, imageVerified,
+    normalVisionResponse, redGreenDeficientResponse, totalColorBlindResponse,
+    protanResponse, deutanResponse, notes, purpose, active,
+  } = req.body;
 
   const image = await IshiharaImage.findById(req.params.id);
   if (!image) return res.status(404).json({ message: 'Image not found.' });
 
-  if (imageId !== undefined) image.imageId = imageId.trim();
-  if (imageUrl !== undefined) image.imageUrl = imageUrl.trim();
-  if (correctAnswer !== undefined) image.correctAnswer = correctAnswer.trim();
+  if (plateId !== undefined) image.plateId = plateId.trim();
+  if (plateNumber !== undefined) image.plateNumber = plateNumber;
+  if (plateType !== undefined) image.plateType = plateType;
   if (category !== undefined) image.category = category.trim();
-  if (difficulty !== undefined) image.difficulty = difficulty;
-  if (active !== undefined) image.active = !!active;
+  if (imageUrl !== undefined) image.imageUrl = imageUrl?.trim() || null;
+  if (imageSource !== undefined) image.imageSource = imageSource?.trim() || null;
+  if (imageSourceUrl !== undefined) image.imageSourceUrl = imageSourceUrl?.trim() || null;
+  if (imageLicense !== undefined) image.imageLicense = imageLicense?.trim() || null;
+  if (imageVerified !== undefined) image.imageVerified = !!imageVerified;
+  if (normalVisionResponse !== undefined) image.normalVisionResponse = normalVisionResponse;
+  if (redGreenDeficientResponse !== undefined) image.redGreenDeficientResponse = redGreenDeficientResponse;
+  if (totalColorBlindResponse !== undefined) image.totalColorBlindResponse = totalColorBlindResponse;
+  if (protanResponse !== undefined) image.protanResponse = protanResponse;
+  if (deutanResponse !== undefined) image.deutanResponse = deutanResponse;
+  if (notes !== undefined) image.notes = notes;
+  if (purpose !== undefined) image.purpose = purpose;
+  if (active !== undefined) image.active = !!active; // model pre-validate hook enforces imageUrl+imageVerified
 
   await image.save();
   res.json({ image });
