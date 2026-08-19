@@ -70,6 +70,13 @@ export default function TestPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
 
+  useEffect(() => {
+    const peekUrl = state?.question?.peekNextImageUrl;
+    if (!peekUrl) return;
+    const img = new Image();
+    img.src = `${apiBase()}${peekUrl}`;
+  }, [state?.question?.peekNextImageUrl]);
+
   const handleSubmit = useCallback(
     async (opts = {}) => {
       if (submitting) return;
