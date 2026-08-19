@@ -5,8 +5,15 @@ const config = require('../config/testConfig');
  * @param {object} plate - an IshiharaImage document/plain object
  * @returns {boolean}
  */
+
 function readNormally(response, plate) {
   if (!plate) return false;
+
+  if (plate.plateType === 'hidden_digit') {
+    const given = (response.givenAnswer ?? '').toString().trim();
+    return response.isSkipped || given === '';
+  }
+
   if (response.isSkipped) return false;
 
   const expected = plate.normalVisionResponse;

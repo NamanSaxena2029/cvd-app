@@ -144,10 +144,7 @@ const submitAnswer = asyncHandler(async (req, res) => {
   // application's own project-level accuracy metric. The clinically
   // meaningful, plate-count-based screening result is computed separately
   // in ishiharaScoringService when the test completes.
-  const isCorrect =
-    !isTimeout &&
-    !isSkipped &&
-    readNormally({ givenAnswer, isSkipped }, currentImage);
+  const isCorrect = !isTimeout && readNormally({ givenAnswer, isSkipped }, currentImage);
 
   await TestAnswer.create({
     session: session._id,

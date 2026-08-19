@@ -10,6 +10,13 @@ import {
   uploadImageFile,
 } from '../services/adminService';
 
+function resolveImageSrc(url) {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url; // already absolute (e.g. external/blob URL)
+  const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/api$/, '');
+  return `${apiBase}${url}`;
+}
+
 const PLATE_TYPES = [
   'demonstration',
   'transformation',
@@ -216,7 +223,7 @@ export default function AdminImagesPage() {
                   <td className="px-4 py-2">
                     <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded bg-slate-100 text-[10px] text-slate-400">
                       {img.imageUrl ? (
-                        <img src={img.imageUrl} alt={img.plateId} className="h-full w-full object-cover" />
+                        <img src={resolveImageSrc(img.imageUrl)} alt={img.plateId} className="h-full w-full object-cover" />
                       ) : (
                         'no image'
                       )}
@@ -295,7 +302,7 @@ export default function AdminImagesPage() {
                 <input type="file" accept="image/*" onChange={handleFileUpload} className="text-sm" />
                 {uploading && <p className="mt-1 text-xs text-slate-400">Uploading...</p>}
                 {form.imageUrl && (
-                  <img src={form.imageUrl} alt="preview" className="mt-2 h-16 w-16 rounded object-cover" />
+                  <img src={resolveImageSrc(form.imageUrl)} alt="preview" className="mt-2 h-16 w-16 rounded object-cover" />
                 )}
               </div>
 
