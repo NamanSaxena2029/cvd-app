@@ -108,6 +108,38 @@ const getResult = asyncHandler(async (req, res) => {
   res.json({ result });
 });
 
+// GET /api/results/:id/answers  (detailed per-question breakdown)
+const getResultAnswers = asyncHandler(async (req, res) => {
+  const result = await TestResult.findById(req.params.id);
+  if (!result) return res.status(404).json({ message: 'Result not found.' });
+
+  const guestToken = req.headers['x-guest-token'] || null;
+  const owned =
+    (req.user && result.user && String(result.user) === String(req.user._id)) ||
+    (result.guestToken && guestToken && result.guestToken === guestToken);
+
+  if (!owned) return res.status(403).json({ message: 'Not authorized to view this result.' });
+
+  const answers = await TestAnswer.find({ session: result.session })
+    .sort({ round: 1, questionIndex: 1 })
+    .populate('image')
+    .lean();
+
+  const detailed = answers.map((a) => ({
+    round: a.round,
+    questionIndex: a.questionIndex,
+    plateNumber: a.image?.plateNumber ?? null,
+    plateType: a.image?.plateType ?? null,
+    givenAnswer: a.givenAnswer,
+    expectedNormalVisionAnswer: a.image?.normalVisionResponse ?? a.normalVisionResponseSnapshot ?? null,
+    isCorrect: a.isCorrect,
+    isTimeout: a.isTimeout,
+    isSkipped: a.isSkipped,
+  }));
+
+  res.json({ answers: detailed });
+});
+
 // GET /api/results/history  (logged in users only)
 const getHistory = asyncHandler(async (req, res) => {
   const results = await TestResult.find({ user: req.user._id }).sort({ completedAt: -1 });
@@ -154,4 +186,4 @@ const getSharedResult = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { completeTest, getResult, getHistory, downloadReport, getSharedResult };
+module.exports = { completeTest, getResult, getHistory, downloadReport, getSharedResult, getResultAnswers };

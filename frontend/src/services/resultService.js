@@ -5,6 +5,11 @@ export async function getResult(id) {
   return data.result;
 }
 
+export async function getResultAnswers(id) {
+  const { data } = await api.get(`/results/${id}/answers`);
+  return data.answers;
+}
+
 export async function getHistory() {
   const { data } = await api.get('/results/history');
   return data.results;

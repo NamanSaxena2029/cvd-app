@@ -40,9 +40,6 @@ async function pickPlatesForSession() {
   }
 
   const SCREENING_TYPES = ['transformation', 'vanishing', 'hidden_digit'];
-  // classification_tracing plates require a line-tracing response, which the
-  // current text-answer UI does not support -- excluded from selection until
-  // that response type is built (see PLATE_TYPES note in testConfig.js).
   const [screeningPlates, otherPlates] = await Promise.all([
     IshiharaImage.find({ active: true, plateType: { $in: SCREENING_TYPES } }).lean(),
     IshiharaImage.find({
@@ -51,26 +48,42 @@ async function pickPlatesForSession() {
     }).lean(),
   ]);
 
-  const pool = [...shuffle(screeningPlates), ...shuffle(otherPlates)];
+  const allPlates = [...screeningPlates, ...otherPlates];
+  const vanishingPool = shuffle(allPlates.filter((p) => p.plateType === 'vanishing'));
+  const restPool = shuffle(allPlates.filter((p) => p.plateType !== 'vanishing'));
 
-  const selected = [];
-  const target = config.TOTAL_QUESTIONS;
+  const rounds = [];
+  let vCursor = 0;
+  let rCursor = 0;
 
-  // First pass: distinct plates, screening types first
-  for (const plate of pool) {
-    if (selected.length >= target) break;
-    selected.push(plate);
+  for (let round = 0; round < config.ROUNDS; round++) {
+    const roundPlates = [];
+    let vanishingUsed = 0;
+
+    while (roundPlates.length < config.QUESTIONS_PER_ROUND) {
+      const takeVanishing =
+        vanishingUsed < config.MAX_VANISHING_PER_ROUND &&
+        vanishingPool.length > 0 &&
+        roundPlates.length % 4 === 3; // roughly 1-in-4 slot, capped
+
+      if (takeVanishing) {
+        roundPlates.push(vanishingPool[vCursor % vanishingPool.length]);
+        vCursor += 1;
+        vanishingUsed += 1;
+      } else if (restPool.length > 0) {
+        roundPlates.push(restPool[rCursor % restPool.length]);
+        rCursor += 1;
+      } else {
+        roundPlates.push(vanishingPool[vCursor % vanishingPool.length]);
+        vCursor += 1;
+        vanishingUsed += 1;
+      }
+    }
+
+    rounds.push(shuffle(roundPlates));
   }
 
-  // Only if there still aren't enough DISTINCT active plates do we repeat,
-  // and we shuffle each additional pass so repeats aren't clustered.
-  let cursor = 0;
-  while (selected.length < target && pool.length > 0) {
-    selected.push(pool[cursor % pool.length]);
-    cursor += 1;
-  }
-
-  return shuffle(selected.slice(0, target));
+  return rounds.flat();
 }
 
 function getServedQuestion(session, images) {

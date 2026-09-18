@@ -19,9 +19,11 @@ export default function TestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
   const [leaveWarningShown, setLeaveWarningShown] = useState(false);
-
+  const [roundResult, setRoundResult] = useState(null);
+  const [pendingNext, setPendingNext] = useState(null);
   const timerRef = useRef(null);
   const hasAutoSubmitted = useRef(false);
+  const isSubmittingRef = useRef(false);
 
   // Load / resume session if we don't have initial state (e.g. on refresh)
   useEffect(() => {
@@ -79,7 +81,8 @@ export default function TestPage() {
 
   const handleSubmit = useCallback(
     async (opts = {}) => {
-      if (submitting) return;
+      if (isSubmittingRef.current) return;
+      isSubmittingRef.current = true;
       setSubmitting(true);
       setError('');
       try {
@@ -95,6 +98,13 @@ export default function TestPage() {
           return;
         }
 
+        if (res.finishedRound && res.roundResult) {
+          clearInterval(timerRef.current);
+          setRoundResult(res.roundResult);
+          setPendingNext(res.nextQuestion);
+          return;
+        }
+
         setState((prev) => ({
           ...prev,
           currentRound: res.nextQuestion.currentRound,
@@ -105,11 +115,24 @@ export default function TestPage() {
       } catch (err) {
         setError(err.response?.data?.message || 'Could not submit answer. Please try again.');
       } finally {
+        isSubmittingRef.current = false;
         setSubmitting(false);
       }
     },
-    [answer, sessionId, submitting, navigate]
+    [answer, sessionId, navigate]
   );
+
+  function handleContinueRound() {
+    setState((prev) => ({
+      ...prev,
+      currentRound: pendingNext.currentRound,
+      currentQuestionIndex: pendingNext.currentQuestionIndex,
+      allowedTimeSeconds: pendingNext.allowedTimeSeconds,
+      question: pendingNext.question,
+    }));
+    setRoundResult(null);
+    setPendingNext(null);
+  }
 
   // Auto-submit as timeout when the clock hits 0
   useEffect(() => {
@@ -133,6 +156,20 @@ export default function TestPage() {
   }
 
   if (!state) return null;
+
+  if (roundResult) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <h2 className="mb-4 text-2xl font-semibold">Round {roundResult.round} Complete</h2>
+        <p className="mb-1">Correct: {roundResult.correct} / {roundResult.total}</p>
+        <p className="mb-1">Timed out: {roundResult.timeout}</p>
+        <p className="mb-6">Accuracy: {Math.round(roundResult.accuracy * 100)}%</p>
+        <Button onClick={handleContinueRound}>
+          Continue to Round {roundResult.round + 1}
+        </Button>
+      </div>
+    );
+  }
 
   const { currentRound, currentQuestionIndex, question, allowedTimeSeconds } = state;
   const progressPct = (currentQuestionIndex / 10) * 100;
@@ -159,6 +196,12 @@ export default function TestPage() {
 
       {/* Center: image, neutral background, no filters/overlays */}
       <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-8">
+        {question?.isHiddenDigit && (
+          <p className="mb-3 text-sm font-medium text-amber-600">
+            If you don't see any number in this plate, press "No Visible Number" below.
+          </p>
+        )}
+
         {question && (
           <img
             src={`${apiBase()}${question.imageUrl}`}
@@ -195,7 +238,10 @@ export default function TestPage() {
               type="button"
               variant="outline"
               disabled={submitting}
-              onClick={() => handleSubmit({ isSkip: true })}
+              onClick={(e) => {
+                e.preventDefault();
+                handleSubmit({ isSkip: true });
+              }}
               className="flex-1"
             >
               No Visible Number

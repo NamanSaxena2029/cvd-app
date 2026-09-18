@@ -5,8 +5,8 @@ import { Download, History, RotateCcw, LayoutDashboard, Share2 } from 'lucide-re
 import { Card, StatCard } from '../components/Card';
 import Button from '../components/Button';
 import Disclaimer from '../components/Disclaimer';
-import { getResult, downloadReport } from '../services/resultService';
 import { useAuth } from '../context/AuthContext';
+import { getResult, downloadReport, getResultAnswers } from '../services/resultService';
 
 const OFFICIAL_STATUS_LABEL = {
   normal_range: 'Normal-Range Screening Result',
@@ -33,6 +33,7 @@ export default function ResultPage() {
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [answers, setAnswers] = useState(null);
 
   useEffect(() => {
     if (result) return;
@@ -42,6 +43,13 @@ export default function ResultPage() {
       .catch(() => setError('Could not load this result.'))
       .finally(() => setLoading(false));
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!result?._id) return;
+    getResultAnswers(result._id)
+      .then(setAnswers)
+      .catch(() => {});
+  }, [result?._id]);
 
   if (loading) return <div className="flex h-[70vh] items-center justify-center text-slate-500">Loading result...</div>;
   if (error || !result) {
@@ -136,6 +144,40 @@ export default function ResultPage() {
         <h2 className="mb-2 font-semibold text-slate-800">Summary</h2>
         <p className="text-sm text-slate-700">{result.explanation}</p>
       </Card>
+
+      {answers && (
+        <Card className="mb-6 overflow-x-auto">
+          <h2 className="mb-4 font-semibold text-slate-800">Detailed Answer Breakdown</h2>
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b text-slate-500">
+                <th className="py-2 pr-4">Round</th>
+                <th className="py-2 pr-4">Plate #</th>
+                <th className="py-2 pr-4">Type</th>
+                <th className="py-2 pr-4">You typed</th>
+                <th className="py-2 pr-4">Expected (normal vision)</th>
+                <th className="py-2 pr-4">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {answers.map((a, i) => (
+                <tr key={i} className="border-b last:border-0">
+                  <td className="py-2 pr-4">{a.round}</td>
+                  <td className="py-2 pr-4">{a.plateNumber ?? '—'}</td>
+                  <td className="py-2 pr-4">{a.plateType ?? '—'}</td>
+                  <td className="py-2 pr-4">
+                    {a.isSkipped ? 'No Visible Number' : a.isTimeout ? '(timed out)' : a.givenAnswer ?? '—'}
+                  </td>
+                  <td className="py-2 pr-4">{a.expectedNormalVisionAnswer ?? '(none / blank expected)'}</td>
+                  <td className={`py-2 pr-4 font-medium ${a.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                    {a.isCorrect ? 'Correct' : 'Wrong'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
 
       <div className="mb-6">
         <Disclaimer />

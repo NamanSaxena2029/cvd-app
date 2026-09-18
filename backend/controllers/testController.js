@@ -16,6 +16,7 @@ function publicImage(image, peekNextImage) {
     id: image._id,
     imageUrl: image.imageUrl,
     peekNextImageUrl: peekNextImage ? peekNextImage.imageUrl : null,
+    isHiddenDigit: image.plateType === 'hidden_digit',
   };
 }
 
@@ -163,6 +164,22 @@ const submitAnswer = asyncHandler(async (req, res) => {
     nextRound += 1;
   }
 
+  let roundResult = null;
+  if (finishedRound) {
+    const roundAnswers = await TestAnswer.find({ session: session._id, round: session.currentRound });
+    const correctCount = roundAnswers.filter((a) => a.isCorrect).length;
+    const timeoutCount = roundAnswers.filter((a) => a.isTimeout).length;
+    const total = roundAnswers.length;
+    roundResult = {
+      round: session.currentRound,
+      correct: correctCount,
+      incorrect: total - correctCount,
+      timeout: timeoutCount,
+      total,
+      accuracy: total ? correctCount / total : 0,
+    };
+  }
+
   const testComplete = nextRound > config.ROUNDS;
 
   if (testComplete) {
@@ -192,6 +209,7 @@ const submitAnswer = asyncHandler(async (req, res) => {
     isSkipped,
     testComplete: false,
     finishedRound,
+    roundResult,
     nextQuestion: {
       currentRound: session.currentRound,
       currentQuestionIndex: session.currentQuestionIndex,
