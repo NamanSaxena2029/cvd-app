@@ -196,12 +196,6 @@ export default function TestPage() {
 
       {/* Center: image, neutral background, no filters/overlays */}
       <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-8">
-        {question?.isHiddenDigit && (
-          <p className="mb-3 text-sm font-medium text-amber-600">
-            If you don't see any number in this plate, press "No Visible Number" below.
-          </p>
-        )}
-
         {question && (
           <img
             src={`${apiBase()}${question.imageUrl}`}

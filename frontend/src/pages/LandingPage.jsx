@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Eye, Timer, ListChecks, BarChart3, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Timer, ListChecks, BarChart3, ShieldCheck, ArrowRight } from 'lucide-react';
 import Button from '../components/Button';
 import { Card } from '../components/Card';
 import Disclaimer from '../components/Disclaimer';
@@ -10,8 +10,8 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="bg-gradient-to-b from-brand-50 to-white">
         <div className="mx-auto max-w-6xl px-4 py-20 text-center">
-          <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white">
-            <Eye size={28} />
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center">
+            <img src="/logo-icon.png" alt="ColorSight" className="h-16 w-16" />
           </div>
           <h1 className="mx-auto max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
             Preliminary Color Vision Screening, Right in Your Browser

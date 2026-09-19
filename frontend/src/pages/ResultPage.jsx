@@ -145,40 +145,6 @@ export default function ResultPage() {
         <p className="text-sm text-slate-700">{result.explanation}</p>
       </Card>
 
-      {answers && (
-        <Card className="mb-6 overflow-x-auto">
-          <h2 className="mb-4 font-semibold text-slate-800">Detailed Answer Breakdown</h2>
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b text-slate-500">
-                <th className="py-2 pr-4">Round</th>
-                <th className="py-2 pr-4">Plate #</th>
-                <th className="py-2 pr-4">Type</th>
-                <th className="py-2 pr-4">You typed</th>
-                <th className="py-2 pr-4">Expected (normal vision)</th>
-                <th className="py-2 pr-4">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {answers.map((a, i) => (
-                <tr key={i} className="border-b last:border-0">
-                  <td className="py-2 pr-4">{a.round}</td>
-                  <td className="py-2 pr-4">{a.plateNumber ?? '—'}</td>
-                  <td className="py-2 pr-4">{a.plateType ?? '—'}</td>
-                  <td className="py-2 pr-4">
-                    {a.isSkipped ? 'No Visible Number' : a.isTimeout ? '(timed out)' : a.givenAnswer ?? '—'}
-                  </td>
-                  <td className="py-2 pr-4">{a.expectedNormalVisionAnswer ?? '(none / blank expected)'}</td>
-                  <td className={`py-2 pr-4 font-medium ${a.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                    {a.isCorrect ? 'Correct' : 'Wrong'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      )}
-
       <div className="mb-6">
         <Disclaimer />
       </div>

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, LogOut, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { LogOut, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
@@ -9,9 +9,8 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <Link to="/" className="flex items-center gap-2 font-semibold text-brand-700">
-          <Eye size={22} />
-          <span>ColorSight</span>
+        <Link to="/" className="flex items-center gap-2">
+          <img src="/logo.png" alt="ColorSight" className="h-8 w-auto" />
         </Link>
 
         <nav className="flex items-center gap-4 text-sm">

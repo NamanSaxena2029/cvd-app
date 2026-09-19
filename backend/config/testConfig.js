@@ -2,7 +2,7 @@ module.exports = {
   ROUNDS: 3,
   QUESTIONS_PER_ROUND: 10,
   TOTAL_QUESTIONS: 30,
-  TIME_PER_QUESTION: [60, 30, 10], // seconds allowed per question, per round (index 0 = round 1)
+  TIME_PER_QUESTION: [60, 30, 15], // seconds allowed per question, per round (index 0 = round 1)
   MIN_ACTIVE_IMAGES_REQUIRED: 10,
 
   CATEGORIES: [
